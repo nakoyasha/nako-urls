@@ -28,6 +28,7 @@
   flex-direction: column;
   justify-content: center;
   text-align: center;
+  overflow: hidden;
 }
 
 .logo {
@@ -41,9 +42,31 @@
   filter: drop-shadow(0 0 2em #24c8db);
 }
 
-.row {
+.download-list {
   display: flex;
+  flex-direction: column;
+  background-color: #222222;
   justify-content: center;
+  align-items: center;
+}
+
+.download {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 25px;
+}
+
+.download-status-pending {
+  color: #fab43e
+}
+
+.download-status-success {
+  color: rgba(49, 170, 89, 0.979)
+}
+
+.download-status-failed {
+  color: rgba(199, 59, 59, 0.979)
 }
 
 a {

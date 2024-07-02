@@ -1,11 +1,169 @@
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open } from "@tauri-apps/api/dialog";
+import { emit, listen } from "@tauri-apps/api/event";
+
 import "./App.css";
+import React, { useEffect, useState } from "react";
+import ConfettiExplosion from "react-confetti-explosion";
+
+export enum DownloadStatus {
+  Downloading = "Downloading",
+  Downloaded = "Downloaded",
+  Failed = "Failed",
+}
+
+export type Download = {
+  url: string;
+  status: DownloadStatus;
+};
+
+export type DownloadPayload = Download[];
+export type BulkDownloadPayload = {
+  urls: DownloadPayload;
+  // janky way to make it remove the element
+  // TODO: make it not janky :blobcatcozy:
+  shouldRemove: boolean;
+};
+
+function Download(props: { download: Download }) {
+  const { download } = props;
+  const statusString =
+    download.status == DownloadStatus.Downloading
+      ? "Downloading"
+      : download.status == DownloadStatus.Downloaded
+      ? "Downloaded"
+      : download.status == DownloadStatus.Failed
+      ? "Failed"
+      : "huh";
+  const downloadStatusStyle =
+    download.status == DownloadStatus.Downloading
+      ? "download-status-pending"
+      : download.status == DownloadStatus.Downloaded
+      ? "download-status-success"
+      : download.status == DownloadStatus.Failed
+      ? "download-status-failed"
+      : "huh";
+
+  return (
+    <div className="download">
+      <p className="download-url">{download.url}</p>
+      <b className={"download-status " + downloadStatusStyle}>{statusString}</b>
+      <button
+        className="download-close"
+        onClick={() => {
+          console.log("meow");
+          emit("url-updated", {
+            ...download,
+            shouldRemove: true,
+          });
+        }}
+      >
+        Remove
+      </button>
+    </div>
+  );
+}
+
+function DownloadsList(props: { downloads: Download[] }) {
+  const { downloads } = props;
+  const displayedDownloads = downloads.map((download) => (
+    <Download download={download} key={download.url} />
+  ));
+
+  if (downloads.length != 0) {
+    return <div className="download-list">{displayedDownloads}</div>;
+  } else {
+    return (
+      <div className="download-list">
+        <p>No currently active downloads :c</p>
+      </div>
+    );
+  }
+}
+
+function ActiveDownloadsHeader(props: {
+  filesToDownload: number;
+  filesDownloaded: number;
+}) {
+  const { filesToDownload, filesDownloaded } = props;
+
+  if (filesToDownload == filesDownloaded && filesToDownload != 0) {
+    return (
+      <h3>
+        Active downloads (All {filesToDownload} files have been downloaded! 🎉)
+      </h3>
+    );
+  }
+
+  if (filesToDownload && filesDownloaded != 0) {
+    return (
+      <h3>
+        Active downloads ({filesToDownload}/{filesDownloaded} downloaded)
+      </h3>
+    );
+  } else {
+    return <h3>Active downloads</h3>;
+  }
+}
 
 function App() {
+  const [downloads, setDownloads] = useState<Download[]>([]);
+  const [filesToDownload, setFilesToDownload] = useState(0);
+  const [filesDownloaded, setFilesDownloaded] = useState(0);
+
+  const [isExploding, setIsExploding] = useState(false);
+
+  useEffect(() => {
+    const bulkUrls = listen("bulk-urls", (event) => {
+      const payload = event.payload as BulkDownloadPayload;
+      const { urls } = payload;
+      setFilesToDownload(urls.length);
+      setDownloads([...downloads, ...urls]);
+    });
+
+    const urlUpdated = listen("url-updated", (event) => {
+      const download = event.payload as Download;
+
+      if (download.status == DownloadStatus.Downloaded) {
+        setFilesDownloaded(filesDownloaded + 1);
+      }
+
+      const newDownloads = downloads
+        .map((_download) => {
+          if (_download.url == download.url) {
+            _download.status = download.status;
+          }
+          return _download;
+          // remove the dirty ones
+        })
+        .filter((_download) => {
+          const shouldRemove =
+            "shouldRemove" in download && _download.url == download.url;
+
+          if (!shouldRemove) {
+            return _download;
+          }
+        });
+
+      setDownloads(newDownloads);
+    });
+
+    return () => {
+      bulkUrls.then((unlisten) => unlisten());
+      urlUpdated.then((unlisten) => unlisten());
+    };
+  });
+
+  useEffect(() => {
+    if (filesDownloaded == filesToDownload && filesDownloaded != 0) {
+      setIsExploding(true);
+      setTimeout(() => {
+        setIsExploding(false);
+      }, 6000);
+    }
+  }, [filesToDownload, filesDownloaded]);
+
   async function openFile() {
-    console.log("a");
     const selected = await open({
       filters: [
         {
@@ -14,7 +172,6 @@ function App() {
         },
       ],
     });
-    console.log(selected);
 
     if (selected == null) {
       alert("pick a file silly");
@@ -27,22 +184,18 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Welcome to Tauri!</h1>
+      <>{isExploding && <ConfettiExplosion />}</>
+      <h1>the world's best url downloader</h1>
+      <h2>(real)</h2>
 
-      <div className="row">
-        <a href="https://vitejs.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://reactjs.org" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
+      <ActiveDownloadsHeader
+        filesToDownload={filesToDownload}
+        filesDownloaded={filesDownloaded}
+      />
+      <DownloadsList downloads={downloads} />
+      <br />
 
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-      <button onClick={openFile}>Pick a file to download</button>
+      <button onClick={openFile}>Pick a JSON file with urls</button>
     </div>
   );
 }
