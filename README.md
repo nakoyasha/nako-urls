@@ -1,3 +1,9 @@
+# nako-urls
+
+funny special tool i wrote to mass-download a bunch of files from a json array with urls
+
+![example](http://i.shiroko.me/u/LFItof.gif)
+
 # Tauri + React + Typescript
 
 This template should help get you started developing with Tauri, React and Typescript in Vite.
